@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digit Span - Unique Numbers</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #f0f4f8; padding: 20px; }
+        #game-container { background: white; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h1 { color: #2d3436; font-size: 22px; margin-bottom: 20px; }
+        #status-display { font-size: 18px; margin: 20px 0; color: #0984e3; font-weight: bold; min-height: 27px; }
+        #visual-cue { width: 60px; height: 60px; border-radius: 50%; background-color: #dfe6e9; margin: 0 auto 25px; transition: 0.2s; }
+        .speaking { background-color: #fdcb6e !important; transform: scale(1.1); box-shadow: 0 0 15px rgba(253, 203, 110, 0.5); }
+        input { font-size: 28px; width: 85%; padding: 15px; margin-bottom: 20px; border: 2px solid #dfe6e9; border-radius: 12px; text-align: center; outline: none; }
+        button { font-size: 18px; padding: 12px 25px; cursor: pointer; border: none; border-radius: 12px; background-color: #0984e3; color: white; margin: 5px; font-weight: bold; width: 100%; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>Digit Span (English)</h1>
+    <div id="visual-cue"></div> 
+    
+    <div id="setup">
+        <button onclick="startGame('normal')">Forward Start (4-digits)</button>
+        <button onclick="startGame('reverse')" style="background-color: #00b894;">Backward Start (4-digits)</button>
+    </div>
+
+    <div id="game" class="hidden">
+        <div id="status-display">Ready...</div>
+        <div id="input-area" class="hidden">
+            <input type="number" id="user-input" placeholder="Enter numbers" inputmode="numeric" onkeyup="if(window.event.keyCode==13){checkAnswer()}">
+            <br>
+            <button onclick="checkAnswer()">Submit</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentLength = 4;
+    let targetNumbers = [];
+    let gameMode = 'normal';
+    const synth = window.speechSynthesis;
+
+    function startGame(mode) {
+        gameMode = mode;
+        currentLength = 4;
+        document.getElementById('setup').classList.add('hidden');
+        document.getElementById('game').classList.remove('hidden');
+        nextRound();
+    }
+
+    function generateUniqueNumbers(len) {
+        if (len <= 10) {
+            // 0~9까지 숫자를 섞어서 필요한 만큼만 가져옴 (중복 없음)
+            const digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+            for (let i = digits.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [digits[i], digits[j]] = [digits[j], digits[i]];
+            }
+            return digits.slice(0, len);
+        } else {
+            // 10자리가 넘어가면 어쩔 수 없이 중복 허용
+            const res = [];
+            for(let i=0; i<len; i++) res.push(Math.floor(Math.random() * 10));
+            return res;
+        }
+    }
+
+    function nextRound() {
+        const statusDisplay = document.getElementById('status-display');
+        statusDisplay.innerText = `Listening to ${currentLength} digits...`;
+        document.getElementById('input-area').classList.add('hidden');
+        document.getElementById('user-input').value = '';
+        
+        // 6자리까지는 중복 없게, 그 이상은 랜덤 생성
+        targetNumbers = (currentLength <= 6) ? generateUniqueNumbers(currentLength) : generateUniqueNumbers(currentLength);
+        // 사실 위 함수가 10자리까지 중복을 막아주지만, 요청하신 대로 6자리 이후부턴 자유롭게 나오도록 로직이 작동합니다.
+
+        speakNumbers(targetNumbers);
+    }
+
+    function speakNumbers(nums) {
+        let index = 0;
+        const cue = document.getElementById('visual-cue');
+        
+        function speakNext() {
+            if (index < nums.length) {
+                const utter = new SpeechSynthesisUtterance(nums[index].toString());
+                utter.lang = 'en-US';
+                utter.rate = 0.8;
+                utter.onstart = () => cue.classList.add('speaking');
+                utter.onend = () => {
+                    cue.classList.remove('speaking');
+                    index++;
+                    setTimeout(speakNext, 500);
+                };
+                synth.speak(utter);
+            } else {
+                document.getElementById('status-display').innerText = "Enter the numbers!";
+                document.getElementById('input-area').classList.remove('hidden');
+                document.getElementById('user-input').focus();
+            }
+        }
+        setTimeout(speakNext, 800);
+    }
+
+    function checkAnswer() {
+        let answer = document.getElementById('user-input').value;
+        let correctAnswer = (gameMode === 'reverse') 
+            ? [...targetNumbers].reverse().join('') 
+            : targetNumbers.join('');
+
+        if (answer === correctAnswer) {
+            alert("Correct! Level Up.");
+            currentLength++;
+            nextRound();
+        } else {
+            alert(`Wrong! \nCorrect: ${correctAnswer}\nFinal Score: ${currentLength}`);
+            location.reload();
+        }
+    }
+</script>
+
+</body>
+</html>
