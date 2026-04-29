@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>인지 마스터 - 숫자 기억력</title>
+    <title>인지 마스터 - 숫자 기억력 (자동 음성 인식)</title>
     <style>
-        :root { --primary: #1c7ed6; --success: #51cf66; --error: #f03e3e; --bg: #f1f3f5; }
+        :root { --primary: #1c7ed6; --success: #51cf66; --error: #f03e3e; --bg: #f1f3f5; --mic: #f03e3e; }
         
         body { 
             font-family: 'Pretendard', sans-serif; 
@@ -21,7 +21,6 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.1); 
             display: flex; flex-direction: column; 
             padding: 30px; box-sizing: border-box; text-align: center;
-            transition: background-color 0.3s;
         }
 
         .training-tip { 
@@ -29,9 +28,6 @@
             padding: 10px; border-radius: 12px; 
             font-size: 14px; font-weight: bold; margin-bottom: 15px;
         }
-
-        h1 { color: #333; font-size: 24px; margin-bottom: 5px; }
-        .sub-title { color: #868e96; font-size: 15px; margin-bottom: 20px; line-height: 1.5; }
 
         #visual-cue-game { 
             width: 70px; height: 70px; border-radius: 50%; 
@@ -50,22 +46,36 @@
             color: var(--primary); font-weight: bold; min-height: 28px; 
         }
 
+        .input-container { width: 100%; margin-bottom: 20px; }
         input { 
             font-size: 32px; width: 100%; padding: 15px; 
             border: 3px solid #e9ecef; border-radius: 18px; 
             text-align: center; outline: none; background: #f8f9fa; 
-            box-sizing: border-box; margin-bottom: 20px;
+            box-sizing: border-box;
         }
-        input:focus { border-color: var(--primary); background: #fff; }
 
-        button { 
+        .mic-indicator {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 60px; height: 60px; border-radius: 50%;
+            background: #dee2e6; font-size: 24px; margin-bottom: 10px;
+            transition: 0.3s;
+        }
+        .mic-active { 
+            background: var(--mic); color: white; 
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(240, 62, 62, 0.7); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 15px rgba(240, 62, 62, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(240, 62, 62, 0); }
+        }
+
+        button.main-btn { 
             font-size: 18px; padding: 18px; cursor: pointer; border: none; 
             border-radius: 18px; background: var(--primary); color: white; 
             font-weight: bold; width: 100%; transition: 0.2s; margin-top: 10px;
         }
-        button:active { transform: scale(0.96); }
-        .btn-reverse { background-color: var(--success); }
-
         .hidden { display: none !important; }
         .correct-flash { background-color: #ebfbee !important; }
         .wrong-flash { background-color: #fff5f5 !important; }
@@ -74,24 +84,27 @@
 <body>
 
 <div id="app">
-    <div class="training-tip">💡 3자리씩 끊어서 기억하도록 연습하면 좋아요</div>
+    <div class="training-tip">💡 문제 종료 1초 후 자동으로 마이크가 켜집니다</div>
     
     <div id="setup-screen">
-        <h1>숫자 따라하기</h1>
-        <div class="sub-title">5자리까지는 중복 없이 생성됩니다.<br>소리에 집중하세요.</div>
-        <div id="visual-cue-game" style="background-color: #f1f3f5;"></div>
-        <button onclick="startGame('normal')">정방향 시작</button>
-        <button class="btn-reverse" onclick="startGame('reverse')">거꾸로 시작</button>
+        <h1>숫자 기억력 테스트</h1>
+        <p style="color:#868e96">들려주는 숫자를 잘 기억하세요.</p>
+        <div id="visual-cue-game" style="margin: 40px auto;"></div>
+        <button class="main-btn" onclick="startGame('normal')">정방향 시작</button>
+        <button class="main-btn" style="background:#51cf66" onclick="startGame('reverse')">거꾸로 시작</button>
     </div>
 
     <div id="game-screen" class="hidden">
         <h1 id="mode-title">훈련 중</h1>
         <div id="status-display">준비 중...</div>
-        <div id="visual-cue-game-inner" style="width: 60px; height: 60px; border-radius: 50%; background:#f1f3f5; margin: 0 auto 25px; transition:0.2s;"></div>
+        <div id="visual-cue-display" class="speaking-dot" style="width:20px; height:20px; border-radius:50%; background:#f1f3f5; margin:0 auto 20px;"></div>
         
         <div id="input-area" class="hidden">
-            <input type="number" id="user-input" pattern="\d*" inputmode="numeric" placeholder="숫자 입력">
-            <button onclick="checkAnswer()">정답 확인</button>
+            <div id="mic-icon" class="mic-indicator">🎤</div>
+            <div class="input-container">
+                <input type="number" id="user-input" inputmode="numeric" placeholder="듣는 중...">
+            </div>
+            <button class="main-btn" onclick="checkAnswer()">확인</button>
         </div>
     </div>
 </div>
@@ -104,79 +117,91 @@
     const synth = window.speechSynthesis;
     const app = document.getElementById('app');
 
+    // 음성 인식 초기화
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecognizing = false;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ko-KR';
+        recognition.interimResults = false;
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            const cleaned = transcript.replace(/[^0-9]/g, '');
+            if (cleaned) {
+                document.getElementById('user-input').value = cleaned;
+                setTimeout(checkAnswer, 800); // 번호 입력 후 자동 확인
+            }
+        };
+
+        recognition.onend = () => {
+            isRecognizing = false;
+            document.getElementById('mic-icon').classList.remove('mic-active');
+        };
+    }
+
+    function startSpeechAuto() {
+        if (!recognition) return;
+        if (isRecognizing) return;
+
+        isRecognizing = true;
+        recognition.start();
+        document.getElementById('mic-icon').classList.add('mic-active');
+        document.getElementById('status-display').innerText = "지금 바로 말씀하세요!";
+    }
+
     function startGame(mode) {
         gameMode = mode;
         currentLength = 3;
         reverseCount = 0;
-        document.getElementById('mode-title').innerText = mode === 'normal' ? "정방향 따라하기" : "거꾸로 따라하기";
         document.getElementById('setup-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         nextRound();
     }
 
-    // [수정된 숫자 생성 로직]
-    function generateNumbers(len) {
-        const res = [];
-        if (len <= 5) {
-            // 5자리까지는 중복 없이 무작위 추출
-            const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-            for (let i = 0; i < len; i++) {
-                const randomIndex = Math.floor(Math.random() * pool.length);
-                res.push(pool.splice(randomIndex, 1)[0]);
-            }
-        } else {
-            // 6자리부터는 중복 허용
-            for (let i = 0; i < len; i++) {
-                res.push(Math.floor(Math.random() * 10));
-            }
-        }
-        return res;
-    }
-
     function nextRound() {
-        const statusDisplay = document.getElementById('status-display');
-        let infoText = `${currentLength}자리 숫자를 들려드립니다...`;
-        if(gameMode === 'reverse') {
-            infoText += ` (${reverseCount + 1}/3회)`;
-        }
-        statusDisplay.innerText = infoText;
-        
+        document.getElementById('status-display').innerText = `${currentLength}자리를 들려드립니다.`;
         document.getElementById('input-area').classList.add('hidden');
         document.getElementById('user-input').value = '';
-        
-        targetNumbers = generateNumbers(currentLength);
+        targetNumbers = Array.from({length: currentLength}, () => Math.floor(Math.random() * 10));
         speakNumbers(targetNumbers);
     }
 
     function speakNumbers(nums) {
         let index = 0;
-        const cue = document.getElementById('visual-cue-game-inner');
+        const dot = document.getElementById('visual-cue-display');
         
-        function speakNext() {
+        function speak() {
             if (index < nums.length) {
                 const utter = new SpeechSynthesisUtterance(nums[index].toString());
                 utter.lang = 'ko-KR';
                 utter.rate = 0.8;
-                
-                utter.onstart = () => cue.classList.add('speaking');
+                utter.onstart = () => dot.style.background = "var(--primary)";
                 utter.onend = () => {
-                    cue.classList.remove('speaking');
+                    dot.style.background = "#f1f3f5";
                     index++;
-                    setTimeout(speakNext, 450);
+                    setTimeout(speak, 500);
                 };
                 synth.speak(utter);
             } else {
-                document.getElementById('status-display').innerText = "입력하세요!";
+                // 핵심 기능: 음성 출력 종료 후 1초 뒤 자동 음성인식 시작
+                document.getElementById('status-display').innerText = "잠시만 기다리세요...";
                 document.getElementById('input-area').classList.remove('hidden');
-                document.getElementById('user-input').focus();
+                setTimeout(startSpeechAuto, 1000); 
             }
         }
-        setTimeout(speakNext, 800);
+        setTimeout(speak, 1000);
     }
 
     function checkAnswer() {
+        if (isRecognizing) recognition.stop();
+        
         const inputField = document.getElementById('user-input');
         let answer = inputField.value;
+        if (!answer) return;
+
         let correctAnswer = (gameMode === 'reverse') 
             ? [...targetNumbers].reverse().join('') 
             : targetNumbers.join('');
@@ -185,32 +210,22 @@
             app.classList.add('correct-flash');
             setTimeout(() => {
                 app.classList.remove('correct-flash');
-                
                 if (gameMode === 'reverse') {
                     reverseCount++;
-                    if (reverseCount >= 3) {
-                        currentLength++;
-                        reverseCount = 0; 
-                        alert("성공! 난이도가 높아집니다.");
-                    }
+                    if (reverseCount >= 3) { currentLength++; reverseCount = 0; }
                 } else {
                     currentLength++;
                 }
                 nextRound();
-            }, 500);
+            }, 600);
         } else {
             app.classList.add('wrong-flash');
             setTimeout(() => {
-                alert(`틀렸습니다! \n\n정답: ${correctAnswer}\n최종 기록: ${currentLength}자리`);
+                alert(`오답입니다!\n정답: ${correctAnswer}\n내 대답: ${answer}`);
                 location.reload();
-            }, 100);
+            }, 200);
         }
     }
-
-    document.getElementById('user-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') checkAnswer();
-    });
 </script>
-
 </body>
 </html>
