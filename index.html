@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>인지 마스터 - 숫자 기억력 (버튼 제어)</title>
+    <title>인지 마스터 - 숫자 기억력 (자릿수 유지)</title>
     <style>
         :root { --primary: #1c7ed6; --success: #51cf66; --error: #f03e3e; --bg: #f1f3f5; --mic: #f03e3e; }
         
@@ -54,12 +54,36 @@
             box-sizing: border-box;
         }
 
+        .length-selector-container {
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .length-selector-container label {
+            font-size: 16px;
+            font-weight: bold;
+            color: #495057;
+        }
+        .length-select {
+            font-size: 16px;
+            padding: 8px 16px;
+            border-radius: 10px;
+            border: 2px solid #dee2e6;
+            outline: none;
+            background: white;
+            font-weight: bold;
+            color: var(--primary);
+            cursor: pointer;
+        }
+
         .mic-indicator {
             display: inline-flex; align-items: center; justify-content: center;
             width: 60px; height: 60px; border-radius: 50%;
             background: #dee2e6; font-size: 24px; margin-bottom: 10px;
             transition: 0.3s;
-            cursor: pointer; /* 마이크를 버튼으로 쓰기 위해 추가 */
+            cursor: pointer;
         }
         .mic-active { 
             background: var(--mic); color: white; 
@@ -90,7 +114,19 @@
     <div id="setup-screen">
         <h1>숫자 기억력 테스트</h1>
         <p style="color:#868e96">들려주는 숫자를 잘 기억하세요.</p>
-        <div id="visual-cue-game" style="margin: 40px auto;"></div>
+        
+        <div class="length-selector-container">
+            <label for="start-length">자릿수 선택:</label>
+            <select id="start-length" class="length-select" onchange="saveLength()">
+                <option value="4">4자리</option>
+                <option value="5">5자리</option>
+                <option value="6">6자리</option>
+                <option value="7">7자리</option>
+                <option value="8">8자리</option>
+            </select>
+        </div>
+
+        <div id="visual-cue-game" style="margin: 20px auto 40px;"></div>
         <button class="main-btn" onclick="startGame('normal')">정방향 시작</button>
         <button class="main-btn" style="background:#51cf66" onclick="startGame('reverse')">거꾸로 시작</button>
     </div>
@@ -111,16 +147,34 @@
 </div>
 
 <script>
-    let currentLength = 4; // 4자리부터 시작하도록 수정
+    let currentLength = 4; 
     let targetNumbers = [];
     let gameMode = 'normal';
-    let reverseCount = 0;
     const synth = window.speechSynthesis;
     const app = document.getElementById('app');
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isRecognizing = false;
+
+    // [추가] 페이지가 켜질 때, 이전에 저장해둔 자릿수가 있다면 그 값으로 세팅합니다.
+    window.onload = function() {
+        const savedLength = localStorage.getItem('remember_digits_length');
+        if (savedLength) {
+            document.getElementById('start-length').value = savedLength;
+            currentLength = parseInt(savedLength, 10);
+        } else {
+            document.getElementById('start-length').value = "4";
+            currentLength = 4;
+        }
+    };
+
+    // [추가] 사용자가 셀렉트 박스에서 자릿수를 바꿨을 때 브라우저에 저장하는 함수
+    function saveLength() {
+        const selectedVal = document.getElementById('start-length').value;
+        localStorage.setItem('remember_digits_length', selectedVal);
+        currentLength = parseInt(selectedVal, 10);
+    }
 
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
@@ -132,7 +186,6 @@
             const cleaned = transcript.replace(/[^0-9]/g, '');
             if (cleaned) {
                 document.getElementById('user-input').value = cleaned;
-                // 인식 완료 후 자동으로 확인 로직 실행 (사용자 편의)
                 setTimeout(checkAnswer, 800);
             }
         };
@@ -152,7 +205,6 @@
         };
     }
 
-    // 마이크 버튼을 눌렀을 때 작동하는 함수
     function toggleSpeech() {
         if (!recognition) return alert("음성 인식을 지원하지 않는 브라우저입니다.");
         if (isRecognizing) {
@@ -165,8 +217,11 @@
 
     function startGame(mode) {
         gameMode = mode;
-        currentLength = 4; // 게임 시작 시 4자리로 세팅되도록 수정
-        reverseCount = 0;
+        
+        // 시작할 때 무조건 저장된 최신 자릿수 기준값으로 구동되도록 동기화
+        const selectedLength = document.getElementById('start-length').value;
+        currentLength = parseInt(selectedLength, 10);
+        
         document.getElementById('setup-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         nextRound();
@@ -177,11 +232,10 @@
         document.getElementById('input-area').classList.add('hidden');
         document.getElementById('user-input').value = '';
         
-        // 숫자가 반복(중복)되지 않도록 0~9 중 랜덤으로 추출하는 로직 적용
         const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         targetNumbers = [];
         for (let i = 0; i < currentLength; i++) {
-            if (pool.length === 0) break; // 자릿수가 10자리를 초과할 경우를 위한 예외 처리
+            if (pool.length === 0) break; 
             const randomIndex = Math.floor(Math.random() * pool.length);
             targetNumbers.push(pool.splice(randomIndex, 1)[0]);
         }
@@ -206,7 +260,6 @@
                 };
                 synth.speak(utter);
             } else {
-                // 음성 출력 종료 후 자동으로 인식하지 않고 입력창만 노출
                 document.getElementById('status-display').innerText = "마이크를 누르고 말씀하세요";
                 document.getElementById('input-area').classList.remove('hidden');
             }
@@ -229,18 +282,19 @@
             app.classList.add('correct-flash');
             setTimeout(() => {
                 app.classList.remove('correct-flash');
-                if (gameMode === 'reverse') {
-                    reverseCount++;
-                    if (reverseCount >= 3) { currentLength++; reverseCount = 0; }
-                } else {
-                    currentLength++;
-                }
+                
+                // 정답 시 한 자리씩 늘려갑니다.
+                currentLength++; 
+                
                 nextRound();
             }, 600);
         } else {
             app.classList.add('wrong-flash');
             setTimeout(() => {
                 alert(`오답입니다!\n정답: ${correctAnswer}\n내 대답: ${answer}`);
+                
+                // [수정 핵심] 틀려서 새로고침이 되더라도 기존에 골라두었던 선택 자릿수가 풀리지 않고
+                // 그대로 유지된 채 초기 화면이 렌더링됩니다.
                 location.reload();
             }, 200);
         }
