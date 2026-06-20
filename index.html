@@ -119,8 +119,7 @@
             <label for="start-length">자릿수 선택:</label>
             <select id="start-length" class="length-select" onchange="saveLength()">
                 <option value="4">4자리</option>
-                <option value="5">5자리</option>
-                <option value="6">6자리</option>
+                <option value="5" selected>5자리</option> <option value="6">6자리</option>
                 <option value="7">7자리</option>
                 <option value="8">8자리</option>
             </select>
@@ -147,7 +146,7 @@
 </div>
 
 <script>
-    let currentLength = 4; 
+    let currentLength = 5; // 변수 기본값을 5자리로 수정
     let targetNumbers = [];
     let gameMode = 'normal';
     const synth = window.speechSynthesis;
@@ -156,20 +155,21 @@
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isRecognizing = false;
+    
+    let responseTimer = null;
+    let isListeningPeriod = false;
 
-    // [추가] 페이지가 켜질 때, 이전에 저장해둔 자릿수가 있다면 그 값으로 세팅합니다.
     window.onload = function() {
         const savedLength = localStorage.getItem('remember_digits_length');
         if (savedLength) {
             document.getElementById('start-length').value = savedLength;
             currentLength = parseInt(savedLength, 10);
         } else {
-            document.getElementById('start-length').value = "4";
-            currentLength = 4;
+            document.getElementById('start-length').value = "5"; // 기본 세팅 5자리로 연동
+            currentLength = 5;
         }
     };
 
-    // [추가] 사용자가 셀렉트 박스에서 자릿수를 바꿨을 때 브라우저에 저장하는 함수
     function saveLength() {
         const selectedVal = document.getElementById('start-length').value;
         localStorage.setItem('remember_digits_length', selectedVal);
@@ -185,6 +185,7 @@
             const transcript = event.results[0][0].transcript;
             const cleaned = transcript.replace(/[^0-9]/g, '');
             if (cleaned) {
+                clearListeningTimer();
                 document.getElementById('user-input').value = cleaned;
                 setTimeout(checkAnswer, 800);
             }
@@ -193,32 +194,58 @@
         recognition.onstart = () => {
             isRecognizing = true;
             document.getElementById('mic-icon').classList.add('mic-active');
-            document.getElementById('status-display').innerText = "지금 말씀하세요!";
+            document.getElementById('status-display').innerText = "지금 말씀하세요! (20초 대기)";
         };
 
         recognition.onend = () => {
             isRecognizing = false;
             document.getElementById('mic-icon').classList.remove('mic-active');
-            if(!document.getElementById('user-input').value) {
+            
+            if (isListeningPeriod && !document.getElementById('user-input').value) {
+                try {
+                    recognition.start();
+                } catch(e) { }
+            } else if (!document.getElementById('user-input').value) {
                 document.getElementById('status-display').innerText = "마이크를 다시 눌러주세요";
             }
         };
     }
 
+    function startListeningTimer() {
+        clearListeningTimer();
+        isListeningPeriod = true;
+        
+        responseTimer = setTimeout(() => {
+            isListeningPeriod = false;
+            if (isRecognizing) recognition.stop();
+            document.getElementById('status-display').innerText = "답변 시간이 초과되었습니다. 다시 시도하세요.";
+            alert("20초 동안 입력이 없어 종료되었습니다.");
+            location.reload();
+        }, 20000);
+    }
+
+    function clearListeningTimer() {
+        isListeningPeriod = false;
+        if (responseTimer) {
+            clearTimeout(responseTimer);
+            responseTimer = null;
+        }
+    }
+
     function toggleSpeech() {
         if (!recognition) return alert("음성 인식을 지원하지 않는 브라우저입니다.");
         if (isRecognizing) {
+            clearListeningTimer();
             recognition.stop();
         } else {
             document.getElementById('user-input').value = '';
+            startListeningTimer();
             recognition.start();
         }
     }
 
     function startGame(mode) {
         gameMode = mode;
-        
-        // 시작할 때 무조건 저장된 최신 자릿수 기준값으로 구동되도록 동기화
         const selectedLength = document.getElementById('start-length').value;
         currentLength = parseInt(selectedLength, 10);
         
@@ -232,12 +259,10 @@
         document.getElementById('input-area').classList.add('hidden');
         document.getElementById('user-input').value = '';
         
-        const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         targetNumbers = [];
         for (let i = 0; i < currentLength; i++) {
-            if (pool.length === 0) break; 
-            const randomIndex = Math.floor(Math.random() * pool.length);
-            targetNumbers.push(pool.splice(randomIndex, 1)[0]);
+            const randomDigit = Math.floor(Math.random() * 10);
+            targetNumbers.push(randomDigit);
         }
         
         speakNumbers(targetNumbers);
@@ -268,6 +293,7 @@
     }
 
     function checkAnswer() {
+        clearListeningTimer();
         if (isRecognizing) recognition.stop();
         
         const inputField = document.getElementById('user-input');
@@ -282,19 +308,13 @@
             app.classList.add('correct-flash');
             setTimeout(() => {
                 app.classList.remove('correct-flash');
-                
-                // 정답 시 한 자리씩 늘려갑니다.
                 currentLength++; 
-                
                 nextRound();
             }, 600);
         } else {
             app.classList.add('wrong-flash');
             setTimeout(() => {
                 alert(`오답입니다!\n정답: ${correctAnswer}\n내 대답: ${answer}`);
-                
-                // [수정 핵심] 틀려서 새로고침이 되더라도 기존에 골라두었던 선택 자릿수가 풀리지 않고
-                // 그대로 유지된 채 초기 화면이 렌더링됩니다.
                 location.reload();
             }, 200);
         }
